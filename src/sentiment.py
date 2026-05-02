@@ -1,9 +1,40 @@
 """Sentiment analysis for financial news headlines."""
 
+import os
 import re
+
+import nltk
 import pandas as pd
 from nltk.sentiment import SentimentIntensityAnalyzer
 from textblob import TextBlob
+
+
+# Download NLTK data on first run.
+# Works on both local and Streamlit Cloud.
+nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
+
+
+def ensure_nltk_data():
+    packages = [
+        "vader_lexicon",
+        "punkt",
+        "stopwords",
+    ]
+    for package in packages:
+        try:
+            nltk.data.find(f"tokenizers/{package}")
+        except LookupError:
+            try:
+                nltk.data.find(f"sentiment/{package}")
+            except LookupError:
+                nltk.download(package, quiet=True)
+
+
+ensure_nltk_data()
+
+
+# Initialize once at module level
+_vader = SentimentIntensityAnalyzer()
 
 
 def clean_text(text):
@@ -27,9 +58,8 @@ def get_vader_score(text):
     """Get VADER sentiment score for text."""
     if not text or not isinstance(text, str):
         return 0.0
-    
-    analyzer = SentimentIntensityAnalyzer()
-    scores = analyzer.polarity_scores(text)
+
+    scores = _vader.polarity_scores(str(text))
     return scores['compound']
 
 
