@@ -547,6 +547,7 @@ def main() -> None:
         <div class="footer">
             Built by Vikas Chaurasia · Data Analyst | AI-Powered Analytics ·
             <a href="https://www.linkedin.com/in/vikasds007/" target="_blank" style="color:#e94560; text-decoration:none;">LinkedIn</a>
+            · <a href="https://vikasds007.github.io/" target="_blank" style="color:#e94560; text-decoration:none;">Portfolio</a>
         </div>
         """,
         unsafe_allow_html=True,
