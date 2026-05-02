@@ -21,6 +21,38 @@ def _load_newsapi_key() -> str | None:
 NEWSAPI_KEY = _load_newsapi_key()
 
 
+def _load_newsdata_key() -> str:
+    """Load NEWSDATA_KEY from Streamlit secrets or environment.
+
+    Prefer Streamlit secrets first, then environment variable. Raise helpful error if missing.
+    """
+    try:
+        import streamlit as st
+
+        key = st.secrets.get("NEWSDATA_KEY")
+        if key:
+            return key
+    except Exception:
+        # fall back to environment variable
+        pass
+
+    key = os.getenv("NEWSDATA_KEY")
+    if key:
+        return key
+
+    raise ValueError(
+        "NEWSDATA_KEY not found. Set NEWSDATA_KEY in .streamlit/secrets.toml or environment variable."
+    )
+
+
+NEWSDATA_KEY: str | None = None
+try:
+    NEWSDATA_KEY = _load_newsdata_key()
+except Exception:
+    # Keep None to allow optional India functionality to surface clear errors when used
+    NEWSDATA_KEY = None
+
+
 def fetch_headlines(categories, page_size=100):
     categories = ["business", "technology", "science"]
     endpoint = "https://newsapi.org/v2/top-headlines"
@@ -51,6 +83,7 @@ def fetch_headlines(categories, page_size=100):
                     "source": source.get("name"),
                     "publishedAt": article.get("publishedAt"),
                     "category": cat,
+                    "region": "Global",
                     "url": article.get("url"),
                 }
             )
@@ -67,6 +100,70 @@ def fetch_headlines(categories, page_size=100):
     return df
 
 
+def fetch_india_headlines():
+    """Fetch India headlines from NewsData.io and return DataFrame with region='India'.
+
+    Uses NEWSDATA_KEY from secrets or env. Parses `results` array.
+    NOTE: Do NOT pass `page` or `page_size` — NewsData.io /1/news endpoint doesn't accept them.
+    """
+    if not NEWSDATA_KEY:
+        raise ValueError(
+            "NEWSDATA_KEY not configured. Add NEWSDATA_KEY to .streamlit/secrets.toml or set environment variable."
+        )
+
+    endpoint = "https://newsdata.io/api/1/news"
+    params = {
+        "apikey": NEWSDATA_KEY,
+        "country": "in",
+        "language": "en",
+        "category": "business,technology",
+    }
+
+    rows = []
+    try:
+        response = requests.get(endpoint, params=params, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        raise
+
+    for article in payload.get("results", []):
+        title = article.get("title")
+        description = article.get("description") or ""
+        source = article.get("source_id")
+        published = article.get("pubDate")
+        category = None
+        try:
+            cats = article.get("category") or []
+            if isinstance(cats, list) and len(cats) > 0:
+                category = cats[0]
+        except Exception:
+            category = None
+
+        rows.append(
+            {
+                "title": title,
+                "description": description,
+                "source": source,
+                "publishedAt": published,
+                "category": category,
+                "url": article.get("link"),
+                "region": "India",
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    df["fetched_at"] = datetime.now().isoformat()
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(base_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    cache_path = os.path.join(data_dir, "india_news_cache.csv")
+    df.to_csv(cache_path, index=False)
+
+    return df
+
+
 def load_headlines():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cache_path = os.path.join(base_dir, "data", "news_cache.csv")
@@ -77,3 +174,15 @@ def load_headlines():
             return pd.read_csv(cache_path)
 
     return fetch_headlines(["business", "technology", "science"])
+
+
+def load_india_headlines():
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cache_path = os.path.join(base_dir, "data", "india_news_cache.csv")
+
+    if os.path.exists(cache_path):
+        modified_time = datetime.fromtimestamp(os.path.getmtime(cache_path))
+        if datetime.now() - modified_time < timedelta(minutes=30):
+            return pd.read_csv(cache_path)
+
+    return fetch_india_headlines()
