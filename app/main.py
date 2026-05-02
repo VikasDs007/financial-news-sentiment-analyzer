@@ -15,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.fetcher import load_headlines, load_india_headlines
+from src.llm import ask_analyst, prepare_context
 from src.sentiment import analyze_headlines
 
 
@@ -233,7 +234,8 @@ def apply_date_filter(df: pd.DataFrame, date_choice: str) -> pd.DataFrame:
     else:
         cutoff = now - pd.Timedelta(days=7)
 
-    pub = pd.to_datetime(df.get("publishedAt"), errors="coerce", utc=True)
+    published_series = df["publishedAt"] if "publishedAt" in df.columns else pd.Series(dtype="object")
+    pub = pd.to_datetime(published_series, errors="coerce", utc=True)
     return df[pub >= cutoff].copy()
 
 
@@ -254,6 +256,61 @@ def render_heading(text: str) -> None:
         f"<div style='font-size:1.4rem;font-weight:700;color:white;margin:1rem 0 0.5rem 0;'>{text}</div>",
         unsafe_allow_html=True,
     )
+
+
+def render_ai_qa(region_df: pd.DataFrame, region: str, suffix: str) -> None:
+    st.markdown(
+        "<div style='font-size:1.4rem;font-weight:700;color:white;margin:1rem 0 0.5rem 0;'>🤖 Ask the AI Analyst</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p style='color:#aaa;font-size:0.85rem;margin-bottom:0.75rem;'>Ask anything about today's market news. Powered by Llama 3 (Groq).</p>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**Quick questions:**")
+    col1, col2, col3 = st.columns(3)
+    question = None
+
+    with col1:
+        if st.button("📊 Overall market mood?", key=f"q1_{suffix}"):
+            question = "What is the overall market mood today and what are the key drivers behind it?"
+
+    with col2:
+        if st.button("⚠️ Most concerning sector?", key=f"q2_{suffix}"):
+            question = "Which sector has the most concerning or negative news today and why should investors pay attention?"
+
+    with col3:
+        if st.button("🚀 Best opportunities today?", key=f"q3_{suffix}"):
+            question = "Based on today's news sentiment, which sectors show the most positive signals and what opportunities do they suggest?"
+
+    user_question = st.text_input(
+        "Or ask your own question:",
+        placeholder="e.g. What is happening in the BFSI sector today?",
+        key=f"custom_q_{suffix}",
+    )
+
+    if user_question:
+        question = user_question
+
+    if question:
+        with st.spinner("🤖 Analyzing today's news..."):
+            context = prepare_context(region_df, region)
+            try:
+                answer = ask_analyst(question, context, region)
+            except Exception as exc:
+                st.error(f"AI request failed: {exc}")
+                return
+
+        st.markdown(
+            f"""
+            <div style='background:#111827;border-left:4px solid #e94560;border-radius:0 12px 12px 0;padding:1rem 1.5rem;margin-top:1rem;color:#e0e0e0;font-size:0.9rem;line-height:1.7;'>
+            <strong style='color:#e94560;'>AI Analyst:</strong><br><br>
+            {answer}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_stat_card(label: str, value: str, subtext: str, accent: str) -> None:
@@ -296,7 +353,6 @@ def style_headline_table(frame: pd.DataFrame) -> pd.io.formats.style.Styler:
         ],
         axis=1,
     )
-    styled = styled.set_properties(**{"color": "white", "background-color": "rgba(255,255,255,0.02)"})
     styled = styled.set_table_styles(
         [
             {"selector": "th", "props": [("background-color", "#15182c"), ("color", "white"), ("border", "1px solid rgba(233, 69, 96, 0.18)")]},
@@ -403,7 +459,8 @@ def main() -> None:
             return
 
         # Data as of: latest publishedAt
-        pub_dates = pd.to_datetime(region_df.get("publishedAt"), errors="coerce", utc=True)
+        published_series = region_df["publishedAt"] if "publishedAt" in region_df.columns else pd.Series(dtype="object")
+        pub_dates = pd.to_datetime(published_series, errors="coerce", utc=True)
         latest_pub = pub_dates.max()
         latest_str = latest_pub.strftime("%d %b %Y %H:%M") if pd.notna(latest_pub) else "Unknown"
 
@@ -507,7 +564,10 @@ def main() -> None:
             showlegend=True,
         )
 
-        sector_avg = region_df.groupby("sector", as_index=False)["sentiment_score"].mean().sort_values("sentiment_score")
+        sector_avg = region_df.groupby("sector", as_index=False).agg(
+            sentiment_score=("sentiment_score", "mean")
+        )
+        sector_avg = sector_avg.sort_values("sentiment_score")
         bar_fig = px.bar(
             sector_avg,
             x="sector",
@@ -531,6 +591,8 @@ def main() -> None:
             st.plotly_chart(pie_fig, width="stretch")
         with chart_right:
             st.plotly_chart(bar_fig, width="stretch")
+
+        render_ai_qa(region_df, region_name, suffix=region_name.lower())
 
     with tab1:
         render_region(filtered_global, "Global")
