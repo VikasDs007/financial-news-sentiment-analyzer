@@ -494,11 +494,19 @@ def main() -> None:
             st.warning("No headlines match the selected filters for this region.")
             return
 
-        # Data as of: latest publishedAt
-        published_series = region_df["publishedAt"] if "publishedAt" in region_df.columns else pd.Series(dtype="object")
-        pub_dates = pd.to_datetime(published_series, errors="coerce", utc=True)
-        latest_pub = pub_dates.max()
-        latest_str = latest_pub.strftime("%d %b %Y %H:%M") if pd.notna(latest_pub) else "Unknown"
+        # Data as of: prefer the fetch time (`fetched_at`) so refreshes show immediately;
+        # fall back to latest publishedAt when fetched_at is missing.
+        latest_str = "Unknown"
+        if "fetched_at" in region_df.columns:
+            fetched_series = pd.to_datetime(region_df["fetched_at"], errors="coerce")
+            latest_fetch = fetched_series.max()
+            if pd.notna(latest_fetch):
+                latest_str = latest_fetch.strftime("%d %b %Y %H:%M")
+        else:
+            published_series = region_df["publishedAt"] if "publishedAt" in region_df.columns else pd.Series(dtype="object")
+            pub_dates = pd.to_datetime(published_series, errors="coerce", utc=True)
+            latest_pub = pub_dates.max()
+            latest_str = latest_pub.strftime("%d %b %Y %H:%M") if pd.notna(latest_pub) else "Unknown"
 
         overall_score = region_df["sentiment_score"].mean()
         mood = mood_from_score(overall_score)
