@@ -183,8 +183,9 @@ st.markdown(THEME_CSS, unsafe_allow_html=True)
 
 def load_dashboard_data(refresh_token: int) -> pd.DataFrame:
     """Load and enrich headlines for the dashboard."""
-    _ = refresh_token
-    raw_df = load_headlines()
+    # Use force_refresh when token > 0 (user clicked the refresh button)
+    force_refresh = refresh_token > 0
+    raw_df = load_headlines(force_refresh=force_refresh)
     analyzed_df = analyze_headlines(raw_df)
     if analyzed_df is None:
         return pd.DataFrame()
@@ -193,14 +194,17 @@ def load_dashboard_data(refresh_token: int) -> pd.DataFrame:
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def cached_dashboard_data(refresh_token: int) -> pd.DataFrame:
+    # refresh_token parameter is used as cache key to invalidate when needed
     return load_dashboard_data(refresh_token)
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def cached_india_data(refresh_token: int) -> pd.DataFrame:
-    # load_india_headlines returns raw India headlines; analyze and return
+    # refresh_token parameter is used as cache key to invalidate when needed
+    # Use force_refresh when token > 0 (user clicked the refresh button)
+    force_refresh = refresh_token > 0
     try:
-        raw = load_india_headlines()
+        raw = load_india_headlines(force_refresh=force_refresh)
         analyzed = analyze_headlines(raw)
         return analyzed if analyzed is not None else pd.DataFrame()
     except Exception:
@@ -363,17 +367,47 @@ def style_headline_table(frame: pd.DataFrame) -> pd.io.formats.style.Styler:
 
 
 def main() -> None:
-    refresh_token = st.session_state.get("refresh_token", 0)
+    # Initialize session state for refresh tracking
+    if "refresh_token" not in st.session_state:
+        st.session_state.refresh_token = 0
 
     with st.sidebar:
         st.markdown("### Controls")
-        if st.button("Refresh Data", width="stretch"):
-            st.session_state["refresh_token"] = refresh_token + 1
-            st.cache_data.clear()
-            st.rerun()
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            if st.button("🔄 Refresh Data", width="stretch", key="refresh_btn"):
+                # Clear streamlit in-memory cache
+                st.cache_data.clear()
 
-        with st.spinner("Fetching latest financial news..."):
-            df = cached_dashboard_data(st.session_state.get("refresh_token", 0))
+                # Delete local cache CSV files so fetcher pulls fresh from APIs
+                import os
+                cache_files = [
+                    'data/news_cache.csv',
+                    'data/india_news_cache.csv'
+                ]
+                for f in cache_files:
+                    if os.path.exists(f):
+                        try:
+                            os.remove(f)
+                        except Exception:
+                            pass
+
+                # Bump refresh token and force rerun to reload everything
+                st.session_state.refresh_token += 1
+                st.success("✅ Cache cleared! Fetching fresh news...")
+                st.rerun()
+        
+        with col2:
+            st.write(f"v{st.session_state.refresh_token}")
+
+        refresh_token = st.session_state.refresh_token
+        
+        with st.spinner("🔄 Fetching fresh financial news from APIs..."):
+            try:
+                df = cached_dashboard_data(refresh_token)
+            except Exception as e:
+                st.error(f"Error fetching data: {str(e)}")
+                st.stop()
 
         if df.empty:
             st.warning("No headlines available right now.")
@@ -426,14 +460,16 @@ def main() -> None:
         )
 
     # load India data as well
-    india_raw = cached_india_data(st.session_state.get("refresh_token", 0))
-
+    india_raw = cached_india_data(refresh_token)
 
     # Apply basic sector/sentiment filters, then date filtering per tab
     global_df = df.copy()
-    india_df = india_raw.copy()
+    india_df = india_raw.copy() if not india_raw.empty else pd.DataFrame()
 
     def apply_filters(df_in: pd.DataFrame) -> pd.DataFrame:
+        # Return empty df if input is empty or missing required columns
+        if df_in.empty or "sector" not in df_in.columns or "sentiment_label" not in df_in.columns:
+            return df_in
         df_out = df_in[df_in["sector"].isin(selected_sectors) & df_in["sentiment_label"].isin(selected_sentiments)].copy()
         df_out = apply_date_filter(df_out, date_choice)
         return df_out

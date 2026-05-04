@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -164,25 +165,27 @@ def fetch_india_headlines():
     return df
 
 
-def load_headlines():
+def load_headlines(force_refresh: bool = False):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cache_path = os.path.join(base_dir, "data", "news_cache.csv")
-
-    if os.path.exists(cache_path):
-        modified_time = datetime.fromtimestamp(os.path.getmtime(cache_path))
-        if datetime.now() - modified_time < timedelta(minutes=30):
+    # If force_refresh is True, skip the cache and fetch fresh data
+    if not force_refresh and os.path.exists(cache_path):
+        mod_time = os.path.getmtime(cache_path)
+        age_minutes = (time.time() - mod_time) / 60
+        if age_minutes < 30:
             return pd.read_csv(cache_path)
 
     return fetch_headlines(["business", "technology", "science"])
 
 
-def load_india_headlines():
+def load_india_headlines(force_refresh: bool = False):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cache_path = os.path.join(base_dir, "data", "india_news_cache.csv")
-
-    if os.path.exists(cache_path):
-        modified_time = datetime.fromtimestamp(os.path.getmtime(cache_path))
-        if datetime.now() - modified_time < timedelta(minutes=30):
+    # If force_refresh is True, skip the cache and fetch fresh data
+    if not force_refresh and os.path.exists(cache_path):
+        mod_time = os.path.getmtime(cache_path)
+        age_minutes = (time.time() - mod_time) / 60
+        if age_minutes < 30:
             return pd.read_csv(cache_path)
 
     return fetch_india_headlines()
