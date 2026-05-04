@@ -4,6 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Live-red?style=flat-square&logo=streamlit)](https://streamlit.io)
+[![Live App](https://img.shields.io/badge/Live-Streamlit-red?style=flat-square&logo=streamlit)](https://financial-news-sentiment-analyzer-vikasds007.streamlit.app/)
 [![Groq](https://img.shields.io/badge/LLM-Llama%203%20(Groq)-orange?style=flat-square)](https://groq.com)
 [![NLP](https://img.shields.io/badge/NLP-VADER%20Sentiment-green?style=flat-square)](https://github.com/cjhutto/vaderSentiment)
 [![Status](https://img.shields.io/badge/Status-Live-brightgreen?style=flat-square)]()
@@ -26,7 +27,7 @@ Built as a dual-source intelligence dashboard:
 
 ## 🚀 Live Demo
 
-> 📌 *[Add your Streamlit Cloud URL here once deployed]*
+> 📌 **[Try the Live App](https://financial-news-sentiment-analyzer-vikasds007.streamlit.app/)**
 
 ---
 
