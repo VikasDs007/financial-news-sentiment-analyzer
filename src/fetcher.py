@@ -54,8 +54,9 @@ except Exception:
     NEWSDATA_KEY = None
 
 
-def fetch_headlines(categories, page_size=100):
-    categories = ["business", "technology", "science"]
+def fetch_headlines(categories=None, page_size=100):
+    if categories is None:
+        categories = ["business", "technology", "science"]
     endpoint = "https://newsapi.org/v2/top-headlines"
     rows = []
 
@@ -68,7 +69,7 @@ def fetch_headlines(categories, page_size=100):
         params = {
             "country": "us",
             "category": cat,
-            "pageSize": 33,
+            "pageSize": page_size,
             "apiKey": NEWSAPI_KEY,
         }
         response = requests.get(endpoint, params=params, timeout=30)
